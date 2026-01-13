@@ -1,0 +1,108 @@
+{
+  "name": "gmail",
+  "version": "1.0.0",
+  "description": "Fast Gmail integration via FGP daemon",
+  "protocol": "fgp@1",
+  "author": "Wolfgang Schoenberger",
+  "license": "MIT",
+  "repository": "https://github.com/wolfiesch/fgp-gmail",
+  "daemon": {
+    "entrypoint": "./target/release/fgp-gmail",
+    "socket": "gmail/daemon.sock",
+    "dependencies": ["python3"]
+  },
+  "methods": [
+    {
+      "name": "inbox",
+      "description": "List recent inbox emails",
+      "params": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "default": 10
+        }
+      ]
+    },
+    {
+      "name": "unread",
+      "description": "Get unread email count and summaries",
+      "params": []
+    },
+    {
+      "name": "search",
+      "description": "Search emails by query",
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "default": 10
+        }
+      ]
+    },
+    {
+      "name": "send",
+      "description": "Send an email",
+      "params": [
+        {
+          "name": "to",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "thread",
+      "description": "Get email thread by ID",
+      "params": [
+        {
+          "name": "thread_id",
+          "type": "string",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "skills": {
+    "claude-code": {
+      "source": "./skills/claude-code/",
+      "target": "~/.claude/skills/gmail/"
+    },
+    "cursor": {
+      "source": "./skills/cursor/",
+      "target": "~/.cursor/rules/"
+    },
+    "windsurf": {
+      "source": "./skills/windsurf/",
+      "target": "~/.windsurf/skills/"
+    }
+  },
+  "auth": {
+    "type": "oauth2",
+    "provider": "google",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.send",
+      "https://www.googleapis.com/auth/gmail.modify"
+    ],
+    "credentials_path": "~/.fgp/auth/google/credentials.json",
+    "token_path": "~/.fgp/auth/google/gmail_token.pickle"
+  },
+  "platforms": ["darwin", "linux"]
+}

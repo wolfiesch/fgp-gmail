@@ -1,0 +1,54 @@
+---
+description: Gmail integration via FGP daemon (10x faster than MCP)
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Gmail Integration
+
+Use `fgp call gmail.*` commands for email operations. This provides 10x faster response times than MCP-based tools.
+
+## Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `fgp call gmail.inbox -p '{"limit": 10}'` | List recent inbox emails |
+| `fgp call gmail.unread` | Get unread count and summaries |
+| `fgp call gmail.search -p '{"query": "from:newsletter"}'` | Search emails |
+| `fgp call gmail.send -p '{"to": "...", "subject": "...", "body": "..."}'` | Send email |
+| `fgp call gmail.thread -p '{"thread_id": "..."}'` | Get email thread |
+
+## Search Query Syntax
+
+Gmail search syntax is supported:
+- `from:sender@example.com` - Filter by sender
+- `to:recipient@example.com` - Filter by recipient
+- `subject:keyword` - Filter by subject
+- `is:unread` - Only unread emails
+- `after:2025/01/01` - After date
+- `has:attachment` - Has attachments
+
+## Response Format
+
+All commands return JSON. Parse the output for structured data:
+
+```json
+{
+  "emails": [
+    {
+      "id": "18abc123",
+      "from": "sender@example.com",
+      "subject": "Meeting tomorrow",
+      "snippet": "Just a reminder..."
+    }
+  ],
+  "count": 10
+}
+```
+
+## When to Use
+
+- User asks to check email, inbox, or unread messages
+- User wants to send an email
+- User asks to search for specific emails
+- User references an email thread
