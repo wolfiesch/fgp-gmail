@@ -1,0 +1,77 @@
+# Continue rules for Gmail FGP integration
+# Place in ~/.continue/rules/
+
+rules:
+  - name: fgp-gmail
+    description: "Fast Gmail access via FGP daemon (10x faster than MCP)"
+    instructions: |
+      Use `fgp call gmail.<method> -p '{params}'` for email operations.
+
+      ## Available Methods
+
+      | Method | Description |
+      |--------|-------------|
+      | `gmail.inbox` | List recent emails from inbox |
+      | `gmail.unread` | Get unread count and summaries |
+      | `gmail.search` | Search emails by query |
+      | `gmail.send` | Send an email |
+      | `gmail.thread` | Get email thread by ID |
+
+      ## Commands
+
+      ### Check Inbox
+      ```bash
+      fgp call gmail.inbox -p '{"limit": 10}'
+      ```
+      Parameters: `limit` (int, optional, default: 10)
+
+      ### Get Unread
+      ```bash
+      fgp call gmail.unread
+      ```
+      No parameters. Returns unread count and first 10 unread emails.
+
+      ### Search Emails
+      ```bash
+      fgp call gmail.search -p '{"query": "from:newsletter", "limit": 5}'
+      ```
+      Parameters: `query` (string, required), `limit` (int, optional)
+
+      Search syntax:
+      - `from:sender@example.com` - Filter by sender
+      - `to:recipient@example.com` - Filter by recipient
+      - `subject:keyword` - Filter by subject
+      - `is:unread` - Only unread emails
+      - `after:2025/01/01` - After date
+      - `has:attachment` - Has attachments
+
+      ### Send Email
+      ```bash
+      fgp call gmail.send -p '{"to": "user@example.com", "subject": "Hello", "body": "Message"}'
+      ```
+      Parameters: `to`, `subject`, `body` (all required strings)
+
+      ### Get Thread
+      ```bash
+      fgp call gmail.thread -p '{"thread_id": "18abc123"}'
+      ```
+      Parameters: `thread_id` (string, required)
+
+      ## Response Format
+
+      All commands return JSON with structured data:
+      - `emails`: Array of email objects
+      - `count`: Number of results
+      - `unread_count`: For unread command
+      - `sent`: Boolean for send command
+
+      ## Troubleshooting
+
+      - Check daemon: `fgp status gmail`
+      - Start daemon: `fgp start gmail`
+      - Logs: `~/.fgp/services/gmail/logs/`
+
+      ## Performance
+
+      - Cold start: ~50ms
+      - Warm call: ~10-30ms (10x faster than MCP)
