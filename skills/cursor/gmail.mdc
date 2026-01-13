@@ -6,21 +6,27 @@ alwaysApply: false
 
 # Gmail Integration
 
-Use `fgp call gmail.*` commands for email operations. This provides 10x faster response times than MCP-based tools.
+Use `fgp call gmail.*` commands for email operations. 10x faster than MCP-based tools.
 
-## Available Commands
+## Commands
 
 | Command | Description |
 |---------|-------------|
 | `fgp call gmail.inbox -p '{"limit": 10}'` | List recent inbox emails |
 | `fgp call gmail.unread` | Get unread count and summaries |
-| `fgp call gmail.search -p '{"query": "from:newsletter"}'` | Search emails |
+| `fgp call gmail.search -p '{"query": "...", "limit": 5}'` | Search emails |
 | `fgp call gmail.send -p '{"to": "...", "subject": "...", "body": "..."}'` | Send email |
 | `fgp call gmail.thread -p '{"thread_id": "..."}'` | Get email thread |
 
+## Parameters
+
+**gmail.inbox**: `limit` (int, optional, default: 10)
+**gmail.search**: `query` (string, required), `limit` (int, optional)
+**gmail.send**: `to`, `subject`, `body` (all required strings)
+**gmail.thread**: `thread_id` (string, required)
+
 ## Search Query Syntax
 
-Gmail search syntax is supported:
 - `from:sender@example.com` - Filter by sender
 - `to:recipient@example.com` - Filter by recipient
 - `subject:keyword` - Filter by subject
@@ -30,7 +36,7 @@ Gmail search syntax is supported:
 
 ## Response Format
 
-All commands return JSON. Parse the output for structured data:
+All commands return JSON:
 
 ```json
 {
@@ -45,6 +51,12 @@ All commands return JSON. Parse the output for structured data:
   "count": 10
 }
 ```
+
+## Error Handling
+
+- "invalid_grant" → OAuth expired, restart daemon
+- "query parameter is required" → Add query to search
+- Daemon not running → `fgp start gmail`
 
 ## When to Use
 
