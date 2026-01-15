@@ -48,6 +48,9 @@ RUN useradd -m -s /bin/bash fgp
 # Copy binary from builder
 COPY --from=builder /app/target/release/fgp-gmail /usr/local/bin/
 
+# Copy Python module
+COPY module /usr/local/bin/module
+
 # Set up FGP directory structure
 RUN mkdir -p /home/fgp/.fgp/services/gmail/logs \
     && chown -R fgp:fgp /home/fgp/.fgp
