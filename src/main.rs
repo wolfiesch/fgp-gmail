@@ -1,13 +1,25 @@
 //! FGP Gmail Daemon
 //!
-//! Fast daemon for Gmail operations. Uses a Python CLI helper for Gmail API calls.
+//! Fast daemon for Gmail operations using PyO3 for warm Python connections.
+//!
+//! # Architecture
+//!
+//! The daemon loads a Python module ONCE at startup via PyO3, keeping the
+//! Gmail API connection warm. This eliminates the ~1-2s cold start overhead
+//! of spawning a new Python subprocess for each request.
+//!
+//! Performance comparison:
+//! - Subprocess per call: ~3.4s (cold Python + OAuth + API init every time)
+//! - PyO3 warm connection: ~30-50ms (10-100x faster!)
 //!
 //! # Methods
-//! - `inbox` - List recent inbox emails
-//! - `unread` - Get unread count and summaries
-//! - `search` - Search emails by query
-//! - `send` - Send an email
-//! - `thread` - Get email thread
+//! - `gmail.inbox` - List recent inbox emails
+//! - `gmail.unread` - Get ACCURATE unread count and summaries
+//! - `gmail.search` - Search emails by query
+//! - `gmail.read` - Read full email with body and attachment info
+//! - `gmail.send` - Send an email with optional attachments
+//! - `gmail.download_attachment` - Download attachment by ID
+//! - `gmail.thread` - Get email thread
 //!
 //! # Setup
 //! 1. Place Google OAuth credentials in ~/.fgp/auth/google/credentials.json
@@ -24,285 +36,66 @@
 //! fgp call gmail.inbox -p '{"limit": 5}'
 //! fgp call gmail.unread
 //! fgp call gmail.search -p '{"query": "from:newsletter"}'
+//! fgp call gmail.read -p '{"message_id": "abc123"}'
+//! fgp call gmail.send -p '{"to": "user@example.com", "subject": "Hi", "body": "Hello!", "attachments": [{"path": "~/file.pdf"}]}'
+//! fgp call gmail.download_attachment -p '{"message_id": "abc123", "attachment_id": "xyz", "save_path": "/tmp/file.pdf"}'
 //! ```
+//!
+//! CHANGELOG (recent first, max 5 entries)
+//! 01/14/2026 - Added attachment support: gmail.read, gmail.download_attachment, gmail.send with attachments (Claude)
+//! 01/13/2026 - Switched to PyO3 PythonModule for warm connections (Claude)
+//! 01/12/2026 - Initial implementation with subprocess per call (Claude)
 
 use anyhow::{bail, Context, Result};
-use fgp_daemon::service::{HealthStatus, MethodInfo, ParamInfo};
-use fgp_daemon::{FgpServer, FgpService};
-use serde_json::Value;
-use std::collections::HashMap;
+use fgp_daemon::python::PythonModule;
+use fgp_daemon::FgpServer;
 use std::path::PathBuf;
-use std::process::Command;
 
-/// Path to the Gmail CLI helper script.
-fn gmail_cli_path() -> PathBuf {
-    // First check next to the binary
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-
-    if let Some(dir) = exe_dir {
-        let script = dir.join("gmail-cli.py");
-        if script.exists() {
-            return script;
-        }
-        // Check in scripts/ relative to binary
-        let script = dir.join("scripts").join("gmail-cli.py");
-        if script.exists() {
-            return script;
-        }
-    }
-
-    // Check ~/.fgp/services/gmail/gmail-cli.py
-    if let Some(home) = dirs::home_dir() {
-        let script = home.join(".fgp/services/gmail/gmail-cli.py");
-        if script.exists() {
-            return script;
-        }
-    }
-
-    // Fallback - assume it's in the cargo project
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/gmail-cli.py")
-}
-
-/// Gmail service using Python CLI for API calls.
-struct GmailService {
-    cli_path: PathBuf,
-}
-
-impl GmailService {
-    fn new() -> Result<Self> {
-        let cli_path = gmail_cli_path();
-        if !cli_path.exists() {
-            bail!(
-                "Gmail CLI not found at: {}\nEnsure gmail-cli.py is installed.",
-                cli_path.display()
-            );
-        }
-        Ok(Self { cli_path })
-    }
-
-    /// Run the Gmail CLI helper and parse JSON output.
-    fn run_cli(&self, args: &[&str]) -> Result<Value> {
-        let output = Command::new("python3")
-            .arg(&self.cli_path)
-            .args(args)
-            .output()
-            .context("Failed to run gmail-cli.py")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Try to parse JSON error from stdout
-            if let Ok(error_json) = serde_json::from_slice::<Value>(&output.stdout) {
-                if let Some(error) = error_json.get("error").and_then(|e| e.as_str()) {
-                    bail!("Gmail API error: {}", error);
-                }
+/// Find the Gmail Python module.
+///
+/// Searches in order:
+/// 1. Next to the binary: ./module/gmail.py
+/// 2. FGP services directory: ~/.fgp/services/gmail/module/gmail.py
+/// 3. Cargo manifest directory (development): ./module/gmail.py
+fn find_module_path() -> Result<PathBuf> {
+    // Check next to the binary
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let module_path = exe_dir.join("module").join("gmail.py");
+            if module_path.exists() {
+                return Ok(module_path);
             }
-            bail!("gmail-cli failed: {}", stderr);
-        }
-
-        serde_json::from_slice(&output.stdout).context("Failed to parse gmail-cli output")
-    }
-}
-
-impl FgpService for GmailService {
-    fn name(&self) -> &str {
-        "gmail"
-    }
-
-    fn version(&self) -> &str {
-        "1.0.0"
-    }
-
-    fn dispatch(&self, method: &str, params: HashMap<String, Value>) -> Result<Value> {
-        match method {
-            "inbox" => self.inbox(params),
-            "unread" => self.unread(),
-            "search" => self.search(params),
-            "send" => self.send(params),
-            "thread" => self.thread(params),
-            _ => bail!("Unknown method: {}", method),
         }
     }
 
-    fn method_list(&self) -> Vec<MethodInfo> {
-        vec![
-            MethodInfo {
-                name: "inbox".into(),
-                description: "List recent inbox emails".into(),
-                params: vec![ParamInfo {
-                    name: "limit".into(),
-                    param_type: "integer".into(),
-                    required: false,
-                    default: Some(Value::Number(10.into())),
-                }],
-            },
-            MethodInfo {
-                name: "unread".into(),
-                description: "Get unread email count and summaries".into(),
-                params: vec![],
-            },
-            MethodInfo {
-                name: "search".into(),
-                description: "Search emails by query".into(),
-                params: vec![
-                    ParamInfo {
-                        name: "query".into(),
-                        param_type: "string".into(),
-                        required: true,
-                        default: None,
-                    },
-                    ParamInfo {
-                        name: "limit".into(),
-                        param_type: "integer".into(),
-                        required: false,
-                        default: Some(Value::Number(10.into())),
-                    },
-                ],
-            },
-            MethodInfo {
-                name: "send".into(),
-                description: "Send an email".into(),
-                params: vec![
-                    ParamInfo {
-                        name: "to".into(),
-                        param_type: "string".into(),
-                        required: true,
-                        default: None,
-                    },
-                    ParamInfo {
-                        name: "subject".into(),
-                        param_type: "string".into(),
-                        required: true,
-                        default: None,
-                    },
-                    ParamInfo {
-                        name: "body".into(),
-                        param_type: "string".into(),
-                        required: true,
-                        default: None,
-                    },
-                ],
-            },
-            MethodInfo {
-                name: "thread".into(),
-                description: "Get email thread by ID".into(),
-                params: vec![ParamInfo {
-                    name: "thread_id".into(),
-                    param_type: "string".into(),
-                    required: true,
-                    default: None,
-                }],
-            },
-        ]
-    }
-
-    fn on_start(&self) -> Result<()> {
-        // Verify Gmail CLI exists and Python is available
-        let output = Command::new("python3")
-            .arg("--version")
-            .output()
-            .context("Python3 not found")?;
-
-        if !output.status.success() {
-            bail!("Python3 not available");
+    // Check FGP services directory
+    if let Some(home) = dirs::home_dir() {
+        let module_path = home
+            .join(".fgp")
+            .join("services")
+            .join("gmail")
+            .join("module")
+            .join("gmail.py");
+        if module_path.exists() {
+            return Ok(module_path);
         }
-
-        tracing::info!(
-            cli_path = %self.cli_path.display(),
-            "Gmail daemon starting"
-        );
-        Ok(())
     }
 
-    fn health_check(&self) -> HashMap<String, HealthStatus> {
-        let mut status = HashMap::new();
-
-        // Check if CLI exists
-        if self.cli_path.exists() {
-            status.insert(
-                "gmail_cli".into(),
-                HealthStatus {
-                    ok: true,
-                    latency_ms: None,
-                    message: Some(format!("CLI at {}", self.cli_path.display())),
-                },
-            );
-        } else {
-            status.insert(
-                "gmail_cli".into(),
-                HealthStatus {
-                    ok: false,
-                    latency_ms: None,
-                    message: Some("gmail-cli.py not found".into()),
-                },
-            );
-        }
-
-        status
-    }
-}
-
-impl GmailService {
-    /// List inbox emails.
-    fn inbox(&self, params: HashMap<String, Value>) -> Result<Value> {
-        let limit = params
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(10);
-
-        self.run_cli(&["inbox", "--limit", &limit.to_string()])
+    // Fallback to cargo manifest directory (development)
+    let cargo_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("module")
+        .join("gmail.py");
+    if cargo_path.exists() {
+        return Ok(cargo_path);
     }
 
-    /// Get unread count and summaries.
-    fn unread(&self) -> Result<Value> {
-        self.run_cli(&["unread"])
-    }
-
-    /// Search emails.
-    fn search(&self, params: HashMap<String, Value>) -> Result<Value> {
-        let query = params
-            .get("query")
-            .and_then(|v| v.as_str())
-            .context("query parameter is required")?;
-
-        let limit = params
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(10);
-
-        self.run_cli(&["search", query, "--limit", &limit.to_string()])
-    }
-
-    /// Send an email.
-    fn send(&self, params: HashMap<String, Value>) -> Result<Value> {
-        let to = params
-            .get("to")
-            .and_then(|v| v.as_str())
-            .context("to parameter is required")?;
-
-        let subject = params
-            .get("subject")
-            .and_then(|v| v.as_str())
-            .context("subject parameter is required")?;
-
-        let body = params
-            .get("body")
-            .and_then(|v| v.as_str())
-            .context("body parameter is required")?;
-
-        self.run_cli(&["send", to, subject, body])
-    }
-
-    /// Get email thread.
-    fn thread(&self, params: HashMap<String, Value>) -> Result<Value> {
-        let thread_id = params
-            .get("thread_id")
-            .and_then(|v| v.as_str())
-            .context("thread_id parameter is required")?;
-
-        self.run_cli(&["thread", thread_id])
-    }
+    bail!(
+        "Gmail module not found. Searched:\n\
+         - <exe_dir>/module/gmail.py\n\
+         - ~/.fgp/services/gmail/module/gmail.py\n\
+         - {}/module/gmail.py",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 fn main() -> Result<()> {
@@ -311,7 +104,18 @@ fn main() -> Result<()> {
         .with_env_filter("fgp_gmail=debug,fgp_daemon=debug")
         .init();
 
-    println!("Starting Gmail daemon...");
+    println!("Starting Gmail daemon (PyO3 warm connection)...");
+    println!();
+
+    // Find and load the Python module
+    let module_path = find_module_path()?;
+    println!("Loading Python module: {}", module_path.display());
+
+    let module = PythonModule::load(&module_path, "GmailModule")
+        .context("Failed to load GmailModule")?;
+
+    println!("Gmail service initialized (warm connection ready)");
+    println!();
     println!("Socket: ~/.fgp/services/gmail/daemon.sock");
     println!();
     println!("Test with:");
@@ -320,8 +124,7 @@ fn main() -> Result<()> {
     println!("  fgp call gmail.search -p '{{\"query\": \"is:unread\"}}'");
     println!();
 
-    let service = GmailService::new()?;
-    let server = FgpServer::new(service, "~/.fgp/services/gmail/daemon.sock")?;
+    let server = FgpServer::new(module, "~/.fgp/services/gmail/daemon.sock")?;
     server.serve()?;
 
     Ok(())

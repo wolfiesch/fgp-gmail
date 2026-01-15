@@ -13,7 +13,7 @@
   },
   "methods": [
     {
-      "name": "inbox",
+      "name": "gmail.inbox",
       "description": "List recent inbox emails",
       "params": [
         {
@@ -25,12 +25,12 @@
       ]
     },
     {
-      "name": "unread",
+      "name": "gmail.unread",
       "description": "Get unread email count and summaries",
       "params": []
     },
     {
-      "name": "search",
+      "name": "gmail.search",
       "description": "Search emails by query",
       "params": [
         {
@@ -47,7 +47,7 @@
       ]
     },
     {
-      "name": "send",
+      "name": "gmail.send",
       "description": "Send an email",
       "params": [
         {
@@ -68,7 +68,7 @@
       ]
     },
     {
-      "name": "thread",
+      "name": "gmail.thread",
       "description": "Get email thread by ID",
       "params": [
         {
