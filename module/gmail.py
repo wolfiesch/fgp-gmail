@@ -9,15 +9,20 @@ CHANGELOG:
 01/13/2026 - Created PyO3-compatible module for warm connections (Claude)
 """
 
+import base64
+import mimetypes
 import pickle
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 # Gmail API scopes
 SCOPES = [
@@ -315,13 +320,6 @@ class GmailModule:
         if not all([to, subject, body]):
             raise ValueError("to, subject, and body parameters are required")
 
-        import base64
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.base import MIMEBase
-        from email import encoders
-        import mimetypes
-
         # Build message - multipart if we have attachments
         if attachments:
             message = MIMEMultipart()
@@ -425,8 +423,6 @@ class GmailModule:
         if not message_id:
             raise ValueError("message_id parameter is required")
 
-        import base64
-
         # Get full message
         msg = self.service.users().messages().get(
             userId='me',
@@ -511,8 +507,6 @@ class GmailModule:
             raise ValueError("message_id parameter is required")
         if not attachment_id:
             raise ValueError("attachment_id parameter is required")
-
-        import base64
 
         # Get attachment data
         attachment = self.service.users().messages().attachments().get(

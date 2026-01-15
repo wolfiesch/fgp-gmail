@@ -47,8 +47,19 @@
       ]
     },
     {
+      "name": "gmail.read",
+      "description": "Read full email with body and attachment info",
+      "params": [
+        {
+          "name": "message_id",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
       "name": "gmail.send",
-      "description": "Send an email",
+      "description": "Send an email with optional attachments",
       "params": [
         {
           "name": "to",
@@ -64,6 +75,44 @@
           "name": "body",
           "type": "string",
           "required": true
+        },
+        {
+          "name": "cc",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "bcc",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "attachments",
+          "type": "array",
+          "required": false,
+          "description": "List of {filename, data (base64)} or {path}"
+        }
+      ]
+    },
+    {
+      "name": "gmail.download_attachment",
+      "description": "Download an attachment from an email",
+      "params": [
+        {
+          "name": "message_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "attachment_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "save_path",
+          "type": "string",
+          "required": false,
+          "description": "Path to save file (returns base64 if not specified)"
         }
       ]
     },
