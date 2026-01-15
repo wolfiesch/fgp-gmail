@@ -166,6 +166,74 @@ cargo test
 cargo run --release
 ```
 
+## Troubleshooting
+
+### OAuth Authorization Failed
+
+**Symptom:** Browser opens but authorization fails or redirects to error page.
+
+**Solutions:**
+1. Ensure your Google Cloud project has Gmail API enabled
+2. Check that OAuth credentials are "Desktop application" type
+3. Verify `credentials.json` is in `~/.fgp/auth/google/`
+4. Try deleting `~/.fgp/auth/google/gmail_token.pickle` and re-authorizing
+
+### Token Expired / Invalid Grant
+
+**Symptom:** Requests fail with "invalid_grant" or "Token has been expired or revoked"
+
+**Solution:**
+```bash
+rm ~/.fgp/auth/google/gmail_token.pickle
+fgp restart gmail
+# Re-authorize when browser opens
+```
+
+### Daemon Not Starting
+
+**Symptom:** `fgp start gmail` fails or daemon exits immediately
+
+**Check:**
+1. Socket permissions: `ls -la ~/.fgp/services/gmail/`
+2. Python available: `which python3`
+3. Logs: `cat ~/.fgp/logs/gmail.log`
+
+### Rate Limiting (429 Error)
+
+**Symptom:** Requests fail with "Quota exceeded" or 429 status
+
+**Solutions:**
+1. Gmail API has daily limits (~1B quota units/day for free)
+2. Reduce request frequency
+3. Use batch operations where possible
+4. Check quota at [Google Cloud Console](https://console.cloud.google.com/apis/api/gmail.googleapis.com/quotas)
+
+### Empty Results
+
+**Symptom:** Queries return empty results when emails exist
+
+**Check:**
+1. Search syntax is correct (Gmail search operators)
+2. Account has the expected emails
+3. Try simpler query first: `fgp call gmail.inbox`
+
+### Connection Refused
+
+**Symptom:** "Connection refused" when calling daemon
+
+**Solution:**
+```bash
+# Check if daemon is running
+pgrep -f fgp-gmail
+
+# Restart daemon
+fgp stop gmail
+fgp start gmail
+
+# Check socket exists
+ls ~/.fgp/services/gmail/daemon.sock
+```
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
