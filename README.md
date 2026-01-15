@@ -172,6 +172,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Related
 
-- [FGP Protocol](https://github.com/wolfiesch/fgp) - Protocol specification
-- [fgp-daemon](https://github.com/wolfiesch/fgp-daemon) - Rust SDK for building daemons
-- [fgp-cli](https://github.com/wolfiesch/fgp-cli) - Command-line interface
+- [protocol](https://github.com/fast-gateway-protocol/protocol) - Protocol specification
+- [daemon](https://github.com/fast-gateway-protocol/daemon) - Rust SDK for building daemons
+- [cli](https://github.com/fast-gateway-protocol/cli) - Command-line interface
